@@ -9,8 +9,10 @@ from processing.utils import perform_processing
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('images_dir', type=str)
-    parser.add_argument('results_file', type=str)
+    # parser.add_argument('images_dir', type=str)
+    # parser.add_argument('results_file', type=str)
+    parser.add_argument('--images_dir', type=str, default='train/')
+    parser.add_argument('--results_file', type=str, default='results.json')
     args = parser.parse_args()
 
     images_dir = Path(args.images_dir)
@@ -18,7 +20,7 @@ def main():
 
     images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}
-    for image_path in images_paths:
+    for image_path in images_paths[5:7]:
         image = cv2.imread(str(image_path))
         if image is None:
             print(f'Error loading image {image_path}')
