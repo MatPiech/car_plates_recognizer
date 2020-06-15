@@ -4,7 +4,7 @@ from pathlib import Path
 
 import cv2
 
-from processing.utils import perform_processing
+from processing.car_plate import CarPlate
 
 
 def main():
@@ -20,13 +20,16 @@ def main():
 
     images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}
-    for image_path in images_paths[5:7]:
+
+    CP = CarPlate()
+
+    for image_path in images_paths:
         image = cv2.imread(str(image_path))
         if image is None:
             print(f'Error loading image {image_path}')
             continue
 
-        results[image_path.name] = perform_processing(image)
+        results[image_path.name] = CP.process(image)
 
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)
