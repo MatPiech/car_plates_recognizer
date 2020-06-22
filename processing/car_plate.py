@@ -3,6 +3,10 @@ import cv2
 import imutils
 from imutils import contours
 import matplotlib.pyplot as plt
+from itertools import product
+import time
+
+from processing.extract_plate import ExtractPlate
 
 
 class CarPlate:
@@ -13,6 +17,7 @@ class CarPlate:
         self.plate_second_part_signs = ['A', 'C', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T',
                                         'U', 'V', 'W', 'X', 'Y', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
         self.readTemplateSigns()
+        self.numbers = []
 
 
     def readTemplateSigns(self):
@@ -20,13 +25,13 @@ class CarPlate:
         self.plate_second_part_roi = np.load('data/plate_second_part_signs.npy')
 
 
-    def getCarPlate(self, img: np.ndarray, h: int=80, w: int=400):
-        img = cv2.resize(img,(620,480))
+    def getCarPlate(self, img: np.ndarray, d: int=11, th1: int=30, epsilon: float=0.02, scale=0.5, h: int=80, w: int=400):
+        img = cv2.resize(img,(int(img.shape[0]*scale),int(img.shape[1]*scale)))
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.bilateralFilter(gray, 11, 17, 17)
+        gray = cv2.bilateralFilter(gray, d, 17, 17)
 
-        edged = cv2.Canny(gray, 30, 255)
+        edged = cv2.Canny(gray, th1, 255)
 
         cnts = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         cnts = imutils.grab_contours(cnts)
@@ -35,7 +40,7 @@ class CarPlate:
 
         for c in cnts:
             peri = cv2.arcLength(c, True)
-            approx = cv2.approxPolyDP(c, 0.018 * peri, True)
+            approx = cv2.approxPolyDP(c, epsilon * peri, True)
             if len(approx) == 4:
                 screenCnt = approx
                 break
@@ -52,7 +57,7 @@ class CarPlate:
             M = cv2.getPerspectiveTransform(pts, np.array([[0,0], [0,h], [w,0], [w,h]], dtype=np.float32))
             warp = cv2.warpPerspective(img, M, (w, h))
 
-            return True, warp
+            return True, [warp]
         else:
             return False, np.array([])
 
@@ -65,22 +70,34 @@ class CarPlate:
 
         cnts = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         cnts = imutils.grab_contours(cnts)
-        cnts = contours.sort_contours(cnts)[0]
+        if len(cnts) > 0:
+            cnts = contours.sort_contours(cnts)[0]
         self.signs = []
+        self.numbers = []
         h_mean = [cv2.boundingRect(c)[3] for c in cnts]
 
         for c in cnts:
             (x, y, w, h) = cv2.boundingRect(c)
-            if h > (np.mean(h_mean)-5) and h > 40 and w > 20 and w < 60:
+            if h > (np.mean(h_mean)-5) and h > 40 and w > 5 and w < 60:
                 roi = thresh[y-np.min([y, 5]): y+h+np.min([thresh.shape[0]-y-h, 5]), x-np.min([x, 5]): x+w+np.min([thresh.shape[1]-x-w, 5])]
                 if roi.shape[0] > 0 and roi.shape[1] > 0:
                     #roi = cv2.morphologyEx(roi, cv2.MORPH_OPEN, np.ones((3,3), np.uint8), iterations=2)
                     roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, np.ones((3,3), np.uint8), iterations=1)
                     #roi = cv2.dilate(roi, np.ones((3,3), np.uint8), iterations=2)
-                    self.signs.append(roi)
+                    if len(self.numbers) < 2:
+                        num = self.recognizeSign(roi, self.plate_first_part_roi, self.plate_first_part_signs)
+                    else:
+                        num = self.recognizeSign(roi, self.plate_second_part_roi, self.plate_second_part_signs)
 
-        if self.signs == [] and threshold<250:
-            self.getCarPlateSigns(car_plate_img, threshold+25)
+                    if w < 20 and (num != 'I' and num != 'J' and num != '1') or num == '':
+                        continue 
+                    self.numbers.append(num)
+                    self.signs.append(roi)
+                if len(self.numbers) == 7:
+                    break
+
+        if self.numbers == [] and threshold<200:
+            self.getCarPlateSigns(car_plate_img, threshold+50)
 
     
     def recognizeSign(self, sign_roi: np.ndarray, reference_signs_roi: np.ndarray, reference_signs: list) -> str:
@@ -89,6 +106,8 @@ class CarPlate:
         
         for reference_roi in reference_signs_roi:
             result = cv2.matchTemplate(sign_roi, reference_roi, cv2.TM_CCOEFF)
+            #result = cv2.matchTemplate(sign_roi, reference_roi, cv2.TM_CCOEFF_NORMED)
+            
             (_, score, _, _) = cv2.minMaxLoc(result)
             scores.append(score)
         
@@ -99,17 +118,62 @@ class CarPlate:
 
 
     def process(self, image: np.ndarray) -> str:
-        detection_found, car_plate_img = self.getCarPlate(img=image)
+        img_copy = image.copy()
+        start = time.time()
+        EP = ExtractPlate()
+        possible_car_plate_signs_list = []
 
-        if detection_found:
-            self.getCarPlateSigns(car_plate_img)
-            first_two_letters = list(map(lambda roi: self.recognizeSign(roi, self.plate_first_part_roi, self.plate_first_part_signs), self.signs[:2]))
-            other_letters = list(map(lambda roi: self.recognizeSign(roi, self.plate_second_part_roi, self.plate_second_part_signs), self.signs[2:]))
-            #print(np.mean([sign.shape for sign in self.signs], axis=0))
-            #print(first_two_letters, other_letters)
-            car_plate_signs = "".join([*first_two_letters, *other_letters])
+        #bilateral_filter_diameter = [11, 9, 7]
+        canny_threshold1 = [10] #, 50, 80]
+        approx_poly_epsilon = [0.02, 0.014] #, 0.002]
+        scale = [0.5, 0.3]
+
+        config_combinations = list(product(*[canny_threshold1, approx_poly_epsilon, scale]))
+
+        for th1, epsilon, s in config_combinations:
+            detection_found, car_plate_imgs = self.getCarPlate(img=image, scale=s, th1=th1, epsilon=epsilon)
+
+            if (time.time() - start) > 1.25:
+                break
+            if not detection_found:
+                continue
+
+            for plate in car_plate_imgs:
+                self.getCarPlateSigns(plate)
+                car_plate_signs = "".join(self.numbers)
+            
+                if car_plate_signs != "" and len(car_plate_signs) <= 7:
+                    possible_car_plate_signs_list.append(car_plate_signs)
+
+                if len(car_plate_signs) == 7:
+                    print(time.time() - start)
+                    return car_plate_signs
+
+            #if list(filter(lambda x: x == 7, car_plate_signs)):
+            #    break
+
+        for s in [0.25, 0.5]:
+            img = cv2.resize(img_copy, None, fx=s, fy=s)
+            car_plate_imgs = EP.detectPlatesInScene(img)
+            if len(car_plate_imgs) > 0:
+                for plate in car_plate_imgs:
+                    plate = cv2.resize(plate, (400,80))
+                    if (time.time() - start) > 1.15:
+                        break
+                    self.getCarPlateSigns(plate)
+                    car_plate_signs = "".join(self.numbers)
+                
+                    if car_plate_signs != "" and len(car_plate_signs) <= 7:
+                        possible_car_plate_signs_list.append(car_plate_signs)
+
+                    if len(car_plate_signs) == 7:
+                        print(time.time() - start)
+                        return car_plate_signs
+
+        print(possible_car_plate_signs_list)
+        print(time.time() - start)
+
+        if len(possible_car_plate_signs_list) == 0:
+            return "???????"
         else:
-            car_plate_signs = "XXXXXXX"
-
-        print(car_plate_signs)
-        return car_plate_signs
+            return sorted(possible_car_plate_signs_list, key=lambda x: len(x))[-1]

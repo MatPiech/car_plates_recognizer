@@ -1,16 +1,18 @@
 import argparse
 import json
 from pathlib import Path
+import time
 
 import cv2
 
 from processing.car_plate import CarPlate
-
+import evaluate.calculate as calc
 
 def main():
+    start = time.time()
     parser = argparse.ArgumentParser()
-    # parser.add_argument('images_dir', type=str)
-    # parser.add_argument('results_file', type=str)
+    #parser.add_argument('images_dir', type=str)
+    #parser.add_argument('results_file', type=str)
     parser.add_argument('--images_dir', type=str, default='train/')
     parser.add_argument('--results_file', type=str, default='results.json')
     args = parser.parse_args()
@@ -34,6 +36,12 @@ def main():
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)
 
+    stop = time.time()
+    full = stop - start
+    print(f'Full time: {full}s\nTime per image: {full/len(images_paths)}s')
+
 
 if __name__ == '__main__':
     main()
+
+    calc.main(Path('results.json'), Path('evaluate/train.json'))
