@@ -5,13 +5,6 @@ class ExtractPlate:
     def __init__(self):
         pass
 
-    def extractValue(self, img: np.ndarray) -> np.ndarray:
-        imgHSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-        imgValue = cv2.split(imgHSV)[2]
-
-        return imgValue
-
     def maximizeContrast(self, gray: np.ndarray) -> np.ndarray:
         structuringElement = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
@@ -24,20 +17,46 @@ class ExtractPlate:
         return imgGrayscalePlusTopHatMinusBlackHat
 
     def preprocess(self, img: np.ndarray) -> np.ndarray:
-        imgGrayscale = self.extractValue(img)
+        """Function preprocess image to extract car plate.
 
-        imgMaxContrastGrayscale = self.maximizeContrast(imgGrayscale)
+        Parameters
+        ----------
+        img : np.ndarray
+            Color image.
 
-        imgBlurred = cv2.GaussianBlur(imgMaxContrastGrayscale, (5, 5), 0)
+        Returns
+        -------
+        np.ndarray
+            Preprocessed image.
+        """
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        imgThresh = cv2.adaptiveThreshold(imgBlurred, 255.0, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 19, 9)
+        imgValue = cv2.split(hsv)[2]
 
-        return imgGrayscale, imgThresh
+        maxContrastGray = self.maximizeContrast(imgValue)
 
-    def findPossibleCharsInScene(self, imgThresh):
-        listOfPossibleChars = []                # this will be the return value
+        blurred = cv2.GaussianBlur(maxContrastGray, (5, 5), 0)
 
-        cnts, npaHierarchy = cv2.findContours(imgThresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)   # find all contours
+        thresh = cv2.adaptiveThreshold(blurred, 255.0, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 19, 9)
+
+        return thresh
+
+    def findPossibleChars(self, thresh: np.ndarray) -> list:
+        """Function finds possible car plate characters.
+
+        Parameters
+        ----------
+        thresh : np.ndarray
+            Preprocessed and thresholded image.
+
+        Returns
+        -------
+        list
+            List with possible plate characters localization in form (x,y,w,h)
+        """
+        listOfPossibleChars = []
+
+        cnts, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
         for c in cnts:
             x,y,w,h = cv2.boundingRect(c)
@@ -49,53 +68,74 @@ class ExtractPlate:
 
         return listOfPossibleChars
 
-    def findListOfMatchingChars(self, possibleChar, listOfChars):
-            # the purpose of this function is, given a possible char and a big list of possible chars,
-            # find all chars in the big list that are a match for the single possible char, and return those matching chars as a list
-        listOfMatchingChars = []                # this will be the return value
+    def findMatchingChars(self, possibleChar, listOfChars) -> list:
+        """[summary]
+
+        Parameters
+        ----------
+        possibleChar : [type]
+            [description]
+        listOfChars : [type]
+            [description]
+
+        Returns
+        -------
+        list
+            [description]
+        """
+        listOfMatchingChars = []
         x,y,w,h = possibleChar
         area = w * h
         
-        for possibleMatchingChar in listOfChars:                # for each char in big list
-            if possibleMatchingChar == possibleChar:    # if the char we attempting to find matches for is the exact same char as the char in the big list we are currently checking
-                                                        # then we should not include it in the list of matches b/c that would end up double including the current char
-                continue                                # so do not add to list of matches and jump back to top of for loop
-            # end if
-            x1,y1,w1,h1 = possibleMatchingChar
-            area1 = w1 * h1
-            fltDiagonalSize = np.sqrt((w1 ** 2) + (h1 ** 2))
-                        # compute stuff to see if chars are a match
-            X = abs((2*x+w)/2 - (2*x1+w1)/2)
-            Y = abs((2*y+h)/2 - (2*y1+h1)/2)
-                
-            fltDistanceBetweenChars = np.sqrt((X ** 2) + (Y ** 2))
+        for possibleMatchingChar in listOfChars:
+            if possibleMatchingChar == possibleChar:
+                continue
+
+            xi,yi,wi,hi = possibleMatchingChar
+            areai = wi * hi
+            diagonal = np.sqrt((wi ** 2) + (hi ** 2))
             
-            if X != 0.0:                           # check to make sure we do not divide by zero if the center X positions are equal, float division by zero will cause a crash in Python
-                fltAngleInRad = np.arctan(Y / X)      # if adjacent is not zero, calculate angle
+            distanceX = abs((2*x+w)/2 - (2*xi+wi)/2)
+            distanceY = abs((2*y+h)/2 - (2*yi+hi)/2)
+                
+            distanceBetweenChars = np.sqrt((distanceX ** 2) + (distanceY ** 2))
+            
+            if distanceX != 0.0:
+                angleInRad = np.arctan(distanceY / distanceX)
             else:
-                fltAngleInRad = 1.5708                          # if adjacent is zero, use this as the angle, this is to be consistent with the C++ version of this program
-            # end if
+                angleInRad = 1.5708
 
-            fltAngleBetweenChars = fltAngleInRad * (180.0 / np.pi)       # calculate angle in degrees
+            angleBetweenChars = angleInRad * (180.0 / np.pi)
 
-            fltChangeInArea = float(abs(area - area1)) / float(area)
+            changeInArea = float(abs(area - areai)) / float(area)
 
-            fltChangeInWidth = float(abs(w - w1)) / float(w)
-            fltChangeInHeight = float(abs(h - h1)) / float(h)
+            changeInWidth = float(abs(w - wi)) / float(w)
+            changeInHeight = float(abs(h - hi)) / float(h)
 
-                    # check if chars match
-            if (fltDistanceBetweenChars < (fltDiagonalSize * 5.0) and fltAngleBetweenChars < 12.0 and
-                fltChangeInArea < 0.5 and fltChangeInWidth < 0.8 and fltChangeInHeight < 0.2):
+            if (distanceBetweenChars < (diagonal * 5.0) and angleBetweenChars < 12.0 and
+                changeInArea < 0.5 and changeInWidth < 0.8 and changeInHeight < 0.2):
 
-                listOfMatchingChars.append(possibleMatchingChar)        # if the chars are a match, add the current char to list of matching chars
+                listOfMatchingChars.append(possibleMatchingChar)
 
-        return listOfMatchingChars                  # return result
+        return listOfMatchingChars
 
-    def findListOfListsOfMatchingChars(self, listOfPossibleChars):
+    def findListOfListsOfMatchingChars(self, listOfPossibleChars: list) -> list:
+        """[summary]
+
+        Parameters
+        ----------
+        listOfPossibleChars : list
+            [description]
+
+        Returns
+        -------
+        list
+            [description]
+        """
         listOfListsOfMatchingChars = []                  # this will be the return value
 
         for possibleChar in listOfPossibleChars:                        # for each possible char in the one big list of chars
-            listOfMatchingChars = self.findListOfMatchingChars(possibleChar, listOfPossibleChars)        # find all chars in the big list that match the current char
+            listOfMatchingChars = self.findMatchingChars(possibleChar, listOfPossibleChars)        # find all chars in the big list that match the current char
 
             listOfMatchingChars.append(possibleChar)                # also add the current char to current possible list of matching chars
 
@@ -121,77 +161,92 @@ class ExtractPlate:
 
             break
 
-
         return listOfListsOfMatchingChars
 
-    def extractPlate(self, imgOriginal, listOfMatchingChars):
+    def extractPlate(self, img: np.ndarray, listOfMatchingChars: list) -> np.ndarray:
+        """Function extracts region which possibly contain car plate.
 
-        #listOfMatchingChars.sort(key = lambda matchingChar: matchingChar.intCenterX)        # sort chars from left to right based on x position
+        Parameters
+        ----------
+        img : np.ndarray
+            Original image of car's front or back.
+        listOfMatchingChars : list
+            [description]
+
+        Returns
+        -------
+        np.ndarray
+            Extracted region with car plate.
+        """
         listOfMatchingChars.sort(key=lambda x: x[0])
         
-                # calculate the center point of the plate
         x0, y0, w0, h0 = listOfMatchingChars[0]
         xn, yn, wn, hn = listOfMatchingChars[-1]
-        X0 = (2*x0+w0) / 2
-        Xn = (2*xn+wn) / 2
-        Y0 = (2*y0+h0) / 2
-        Yn = (2*yn+hn) / 2
+        centerX0 = (2*x0+w0) / 2
+        centerXn = (2*xn+wn) / 2
+        centerY0 = (2*y0+h0) / 2
+        centerYn = (2*yn+hn) / 2
             
-        fltPlateCenterX = (X0 + Xn) / 2.0
-        fltPlateCenterY = (Y0 + Yn) / 2.0
+        plateCenterX = (centerX0 + centerXn) / 2.0
+        plateCenterY = (centerY0 + centerYn) / 2.0
 
-        ptPlateCenter = fltPlateCenterX, fltPlateCenterY
+        plateCenter = (plateCenterX, plateCenterY)
 
-                # calculate plate width and height
-        intPlateWidth = int((xn + wn - x0) * 1.3)
+        plateWidth = int((xn + wn - x0) * 1.3)
 
-        intTotalOfCharHeights = 0
+        totalOfCharHeights = 0
 
         for matchingChar in listOfMatchingChars:
-            intTotalOfCharHeights = intTotalOfCharHeights + matchingChar[3]
+            totalOfCharHeights += matchingChar[3]
 
-        fltAverageCharHeight = intTotalOfCharHeights / len(listOfMatchingChars)
+        fltAverageCharHeight = totalOfCharHeights / len(listOfMatchingChars)
 
-        intPlateHeight = int(fltAverageCharHeight * 1.5)
+        plateHeight = int(fltAverageCharHeight * 1.5)
 
                 # calculate correction angle of plate region
-        fltOpposite = Yn - Y0
-        fltHypotenuse = np.sqrt(((X0-Xn) ** 2) + ((Y0-Yn) ** 2))
+        fltOpposite = centerYn - centerY0
+        fltHypotenuse = np.sqrt(((centerX0-centerXn) ** 2) + ((centerY0-centerYn) ** 2))
         fltCorrectionAngleInRad = np.arcsin(fltOpposite / fltHypotenuse)
         fltCorrectionAngleInDeg = fltCorrectionAngleInRad * (180.0 / np.pi)
 
                 # final steps are to perform the actual rotation
 
                 # get the rotation matrix for our calculated correction angle
-        rotationMatrix = cv2.getRotationMatrix2D(tuple(ptPlateCenter), fltCorrectionAngleInDeg, 1.0)
+        rotationMatrix = cv2.getRotationMatrix2D(plateCenter, fltCorrectionAngleInDeg, 1.0)
 
-        height, width, numChannels = imgOriginal.shape      # unpack original image width and height
+        height, width = img.shape[:2]
 
-        imgRotated = cv2.warpAffine(imgOriginal, rotationMatrix, (width, height))       # rotate the entire image
+        imgRotated = cv2.warpAffine(img, rotationMatrix, (width, height))
 
-        imgCropped = cv2.getRectSubPix(imgRotated, (intPlateWidth, intPlateHeight), tuple(ptPlateCenter))
+        imgCropped = cv2.getRectSubPix(imgRotated, (plateWidth, plateHeight), plateCenter)
         
         return imgCropped
 
-    def detectPlatesInScene(self, img):
+    def detect(self, img: np.ndarray) -> list:
+        """Main function of ExtractPlate class 
+
+        Parameters
+        ----------
+        img : np.ndarray
+            Original image of car's front or back.
+
+        Returns
+        -------
+        list
+            Extracted possible plates.
+        """
         listOfPossiblePlates = []
         
-        height, width, numChannels = img.shape
+        thresh = self.preprocess(img)
+        
+        listOfPossibleChars = self.findPossibleChars(thresh)
+        
+        listOfListsOfMatchingCharsInScene = self.findListOfListsOfMatchingChars(listOfPossibleChars)
+        
+        for listOfMatchingChars in listOfListsOfMatchingCharsInScene:
+            imgCropped = self.extractPlate(img, listOfMatchingChars)
 
-        imgGrayscaleScene = np.zeros((height, width, 1), np.uint8)
-        imgThreshScene = np.zeros((height, width, 1), np.uint8)
-        imgContours = np.zeros((height, width, 3), np.uint8)
-        
-        imgGrayscaleScene, imgThreshScene = self.preprocess(img)
-        
-        listOfPossibleCharsInScene = self.findPossibleCharsInScene(imgThreshScene)
-        
-        listOfListsOfMatchingCharsInScene = self.findListOfListsOfMatchingChars(listOfPossibleCharsInScene)
-        
-        for listOfMatchingChars in listOfListsOfMatchingCharsInScene:                   # for each group of matching chars
-            imgCropped = self.extractPlate(img, listOfMatchingChars)         # attempt to extract plate
-
-            if imgCropped is not None:                          # if plate was found
-                listOfPossiblePlates.append(imgCropped)                  # add to list of possible plates
+            if imgCropped is not None:
+                listOfPossiblePlates.append(imgCropped)
         
         return listOfPossiblePlates

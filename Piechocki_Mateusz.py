@@ -6,10 +6,12 @@ import time
 import cv2
 
 from processing.car_plate import CarPlate
-import evaluate.calculate as calc
+import evaluate.calculate as calc                           # TO REMOVE
 
 def main():
-    start = time.time()
+    """Main function of project, reads images, calls process function and manages results of detection.
+    """
+    start = time.time()                                     # TO REMOVE
     parser = argparse.ArgumentParser()
     #parser.add_argument('images_dir', type=str)
     #parser.add_argument('results_file', type=str)
@@ -36,12 +38,12 @@ def main():
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)
 
-    stop = time.time()
-    full = stop - start
-    print(f'Full time: {full}s\nTime per image: {full/len(images_paths)}s')
+    stop = time.time()                                      # TO REMOVE
+    full = stop - start                                     # TO REMOVE
+    print(f'Full time: {full}s\nTime per image: {full/len(images_paths)}s') # TO REMOVE
 
 
 if __name__ == '__main__':
     main()
 
-    calc.main(Path('results.json'), Path('evaluate/train.json'))
+    calc.main(Path('results.json'), Path('evaluate/train.json')) # TO REMOVE
