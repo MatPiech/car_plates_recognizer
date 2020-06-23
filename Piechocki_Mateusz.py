@@ -1,28 +1,25 @@
 import argparse
 import json
 from pathlib import Path
-import time
 
 import cv2
 
 from processing.car_plate import CarPlate
-import evaluate.calculate as calc                           # TO REMOVE
+
 
 def main():
     """Main function of project, reads images, calls process function and manages results of detection.
     """
-    start = time.time()                                     # TO REMOVE
     parser = argparse.ArgumentParser()
-    #parser.add_argument('images_dir', type=str)
-    #parser.add_argument('results_file', type=str)
-    parser.add_argument('--images_dir', type=str, default='train/')
-    parser.add_argument('--results_file', type=str, default='results.json')
+    parser.add_argument('images_dir', type=str)
+    parser.add_argument('results_file', type=str)
     args = parser.parse_args()
 
     images_dir = Path(args.images_dir)
     results_file = Path(args.results_file)
 
-    images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
+    images_paths = sorted([image_path for image_path in images_dir.iterdir(
+    ) if image_path.name.endswith('.jpg')])
     results = {}
 
     CP = CarPlate()
@@ -38,12 +35,6 @@ def main():
     with results_file.open('w') as output_file:
         json.dump(results, output_file, indent=4)
 
-    stop = time.time()                                      # TO REMOVE
-    full = stop - start                                     # TO REMOVE
-    print(f'Full time: {full}s\nTime per image: {full/len(images_paths)}s') # TO REMOVE
-
 
 if __name__ == '__main__':
     main()
-
-    calc.main(Path('results.json'), Path('evaluate/train.json')) # TO REMOVE

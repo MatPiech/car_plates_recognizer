@@ -5,16 +5,28 @@ class ExtractPlate:
     def __init__(self):
         pass
 
-    def maximizeContrast(self, gray: np.ndarray) -> np.ndarray:
-        structuringElement = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    def maximizeContrast(self, img_gray: np.ndarray) -> np.ndarray:
+        """Function to maximize contrast of processed image.
 
-        imgTopHat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, structuringElement)
-        imgBlackHat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, structuringElement)
+        Parameters
+        ----------
+        img_gray : np.ndarray
+            Image in grayscale.
 
-        imgGrayscalePlusTopHat = cv2.add(gray, imgTopHat)
-        imgGrayscalePlusTopHatMinusBlackHat = cv2.subtract(imgGrayscalePlusTopHat, imgBlackHat)
+        Returns
+        -------
+        np.ndarray
+            Image with maximized contrast.
+        """
+        structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
-        return imgGrayscalePlusTopHatMinusBlackHat
+        img_TopHat = cv2.morphologyEx(img_gray, cv2.MORPH_TOPHAT, structuring_element)
+        img_BlackHat = cv2.morphologyEx(img_gray, cv2.MORPH_BLACKHAT, structuring_element)
+
+        img_gray_plus_TopHat = cv2.add(img_gray, img_TopHat)
+        img_gray_plus_TopHat_minus_BlackHat = cv2.subtract(img_gray_plus_TopHat, img_BlackHat)
+
+        return img_gray_plus_TopHat_minus_BlackHat
 
     def preprocess(self, img: np.ndarray) -> np.ndarray:
         """Function preprocess image to extract car plate.
@@ -31,22 +43,22 @@ class ExtractPlate:
         """
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
-        imgValue = cv2.split(hsv)[2]
+        img_value = cv2.split(hsv)[2]
 
-        maxContrastGray = self.maximizeContrast(imgValue)
+        img_max_contrast_gray = self.maximizeContrast(img_value)
 
-        blurred = cv2.GaussianBlur(maxContrastGray, (5, 5), 0)
+        img_blurred = cv2.GaussianBlur(img_max_contrast_gray, (5, 5), 0)
 
-        thresh = cv2.adaptiveThreshold(blurred, 255.0, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 19, 9)
+        img_thresh = cv2.adaptiveThreshold(img_blurred, 255.0, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 19, 9)
 
-        return thresh
+        return img_thresh
 
-    def findPossibleChars(self, thresh: np.ndarray) -> list:
+    def findpossible_characteracters(self, img_thresh: np.ndarray) -> list:
         """Function finds possible car plate characters.
 
         Parameters
         ----------
-        thresh : np.ndarray
+        img_thresh : np.ndarray
             Preprocessed and thresholded image.
 
         Returns
@@ -54,123 +66,117 @@ class ExtractPlate:
         list
             List with possible plate characters localization in form (x,y,w,h)
         """
-        listOfPossibleChars = []
+        list_of_possible_characteracters = []
 
-        cnts, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        cnts, _ = cv2.findContours(img_thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
         for c in cnts:
-            x,y,w,h = cv2.boundingRect(c)
+            x, y, w, h = cv2.boundingRect(c)
             area = w * h
             ratio = w / h 
         
             if (area > 80 and w > 2 and h > 8 and 0.25 < ratio and ratio < 1):
-                listOfPossibleChars.append((x,y,w,h))
+                list_of_possible_characteracters.append((x,y,w,h))
 
-        return listOfPossibleChars
+        return list_of_possible_characteracters
 
-    def findMatchingChars(self, possibleChar, listOfChars) -> list:
-        """[summary]
+    def findMatchingChars(self, possible_character: tuple, list_of_characters: list) -> list:
+        """Function to check if possible_character meet the conditions of car plate character.
 
         Parameters
         ----------
-        possibleChar : [type]
-            [description]
-        listOfChars : [type]
-            [description]
+        possible_character : tuple
+            Tested contour of possible character in form (x,y,w,h).
+        list_of_characters : list
+            List of all possible characters.
 
         Returns
         -------
         list
-            [description]
+            Regions which meet the conditions of possible character.
         """
-        listOfMatchingChars = []
-        x,y,w,h = possibleChar
+        list_of_matching_characters = []
+        x, y, w, h = possible_character
         area = w * h
         
-        for possibleMatchingChar in listOfChars:
-            if possibleMatchingChar == possibleChar:
+        for possible_matching_characters in list_of_characters:
+            if possible_matching_characters == possible_character:
                 continue
 
-            xi,yi,wi,hi = possibleMatchingChar
-            areai = wi * hi
-            diagonal = np.sqrt((wi ** 2) + (hi ** 2))
+            x_i,y_i,w_i,h_i = possible_matching_characters
+            area_i = w_i * h_i
+            diagonal = np.sqrt((w_i ** 2) + (h_i ** 2))
             
-            distanceX = abs((2*x+w)/2 - (2*xi+wi)/2)
-            distanceY = abs((2*y+h)/2 - (2*yi+hi)/2)
+            distance_x = abs((2*x+w)/2 - (2*x_i+w_i)/2)
+            distance_y = abs((2*y+h)/2 - (2*y_i+h_i)/2)
                 
-            distanceBetweenChars = np.sqrt((distanceX ** 2) + (distanceY ** 2))
+            distance_between_chars = np.sqrt((distance_x ** 2) + (distance_y ** 2))
             
-            if distanceX != 0.0:
-                angleInRad = np.arctan(distanceY / distanceX)
+            if distance_x != 0.0:
+                angle_in_rad = np.arctan(distance_y / distance_x)
             else:
-                angleInRad = 1.5708
+                angle_in_rad = 1.5708
 
-            angleBetweenChars = angleInRad * (180.0 / np.pi)
+            angle_between_chars = angle_in_rad * (180.0 / np.pi)
 
-            changeInArea = float(abs(area - areai)) / float(area)
+            change_in_area = float(abs(area - area_i)) / float(area)
 
-            changeInWidth = float(abs(w - wi)) / float(w)
-            changeInHeight = float(abs(h - hi)) / float(h)
+            change_in_width = float(abs(w - w_i)) / float(w)
+            change_in_height = float(abs(h - h_i)) / float(h)
 
-            if (distanceBetweenChars < (diagonal * 5.0) and angleBetweenChars < 12.0 and
-                changeInArea < 0.5 and changeInWidth < 0.8 and changeInHeight < 0.2):
+            if (distance_between_chars < (diagonal * 5.0) and angle_between_chars < 12.0 and
+                change_in_area < 0.5 and change_in_width < 0.8 and change_in_height < 0.2):
 
-                listOfMatchingChars.append(possibleMatchingChar)
+                list_of_matching_characters.append(possible_matching_characters)
 
-        return listOfMatchingChars
+        return list_of_matching_characters
 
-    def findListOfListsOfMatchingChars(self, listOfPossibleChars: list) -> list:
-        """[summary]
+    def findListOfListsOfMatchingChars(self, list_of_possible_characters: list) -> list:
+        """Function which generate all possible plates.
 
         Parameters
         ----------
-        listOfPossibleChars : list
-            [description]
+        list_of_possible_characters : list
+            List of all possible characters.
 
         Returns
         -------
         list
-            [description]
+            List of lists which contain car plate charcters needed to crop plate.
         """
-        listOfListsOfMatchingChars = []                  # this will be the return value
+        list_of_lists_of_matching_chars = []
 
-        for possibleChar in listOfPossibleChars:                        # for each possible char in the one big list of chars
-            listOfMatchingChars = self.findMatchingChars(possibleChar, listOfPossibleChars)        # find all chars in the big list that match the current char
+        for possible_character in list_of_possible_characters:
+            list_of_matching_characters = self.findMatchingChars(possible_character, list_of_possible_characters)
 
-            listOfMatchingChars.append(possibleChar)                # also add the current char to current possible list of matching chars
+            list_of_matching_characters.append(possible_character)
 
-            if len(listOfMatchingChars) < 3:     # if current possible list of matching chars is not long enough to constitute a possible plate
-                continue                            # jump back to the top of the for loop and try again with next char, note that it's not necessary
-                                                    # to save the list in any way since it did not have enough chars to be a possible plate
-            # end if
+            if len(list_of_matching_characters) < 3:
+                continue
 
-                                                    # if we get here, the current list passed test as a "group" or "cluster" of matching chars
-            listOfListsOfMatchingChars.append(listOfMatchingChars)      # so add to our list of lists of matching chars
+            list_of_lists_of_matching_chars.append(list_of_matching_characters)
 
-            listOfPossibleCharsWithCurrentMatchesRemoved = []
+            list_of_possible_characters_with_current_matches_removed = []
 
-                                                    # remove the current list of matching chars from the big list so we don't use those same chars twice,
-                                                    # make sure to make a new big list for this since we don't want to change the original big list
-            listOfPossibleCharsWithCurrentMatchesRemoved = list(set(listOfPossibleChars) - set(listOfMatchingChars))
+            list_of_possible_characters_with_current_matches_removed = list(set(list_of_possible_characters) - set(list_of_matching_characters))
 
-            recursiveListOfListsOfMatchingChars = self.findListOfListsOfMatchingChars(listOfPossibleCharsWithCurrentMatchesRemoved)      # recursive call
+            recursivelist_of_lists_of_matching_chars = self.findListOfListsOfMatchingChars(list_of_possible_characters_with_current_matches_removed)
 
-            for recursiveListOfMatchingChars in recursiveListOfListsOfMatchingChars:        # for each list of matching chars found by recursive call
-                listOfListsOfMatchingChars.append(recursiveListOfMatchingChars)             # add to our original list of lists of matching chars
-            # end for
+            for recursivelist_of_matching_characters in recursivelist_of_lists_of_matching_chars:
+                list_of_lists_of_matching_chars.append(recursivelist_of_matching_characters)
 
             break
 
-        return listOfListsOfMatchingChars
+        return list_of_lists_of_matching_chars
 
-    def extractPlate(self, img: np.ndarray, listOfMatchingChars: list) -> np.ndarray:
+    def extractPlate(self, img: np.ndarray, list_of_matching_characters: list) -> np.ndarray:
         """Function extracts region which possibly contain car plate.
 
         Parameters
         ----------
         img : np.ndarray
             Original image of car's front or back.
-        listOfMatchingChars : list
+        list_of_matching_characters : list
             [description]
 
         Returns
@@ -178,49 +184,46 @@ class ExtractPlate:
         np.ndarray
             Extracted region with car plate.
         """
-        listOfMatchingChars.sort(key=lambda x: x[0])
+        list_of_matching_characters.sort(key=lambda x: x[0])
         
-        x0, y0, w0, h0 = listOfMatchingChars[0]
-        xn, yn, wn, hn = listOfMatchingChars[-1]
-        centerX0 = (2*x0+w0) / 2
-        centerXn = (2*xn+wn) / 2
-        centerY0 = (2*y0+h0) / 2
-        centerYn = (2*yn+hn) / 2
+        x_0, y_0, w_0, h_0 = list_of_matching_characters[0]
+        x_n, y_n, w_n, h_n = list_of_matching_characters[-1]
+
+        center_x_0 = (2*x_0+w_0) / 2
+        center_x_n = (2*x_n+w_n) / 2
+        center_y_0 = (2*y_0+h_0) / 2
+        center_y_n = (2*y_n+h_n) / 2
             
-        plateCenterX = (centerX0 + centerXn) / 2.0
-        plateCenterY = (centerY0 + centerYn) / 2.0
+        plate_center_x = (center_x_0 + center_x_n) / 2.0
+        plate_center_y = (center_y_0 + center_y_n) / 2.0
 
-        plateCenter = (plateCenterX, plateCenterY)
+        plate_center = (plate_center_x, plate_center_y)
 
-        plateWidth = int((xn + wn - x0) * 1.3)
+        plate_width = int((x_n + w_n - x_0) * 1.3)
 
-        totalOfCharHeights = 0
+        total_of_char_heights = 0
 
-        for matchingChar in listOfMatchingChars:
-            totalOfCharHeights += matchingChar[3]
+        for matchingChar in list_of_matching_characters:
+            total_of_char_heights += matchingChar[3]
 
-        fltAverageCharHeight = totalOfCharHeights / len(listOfMatchingChars)
+        average_char_height = total_of_char_heights / len(list_of_matching_characters)
 
-        plateHeight = int(fltAverageCharHeight * 1.5)
+        plate_height = int(average_char_height * 1.5)
 
-                # calculate correction angle of plate region
-        fltOpposite = centerYn - centerY0
-        fltHypotenuse = np.sqrt(((centerX0-centerXn) ** 2) + ((centerY0-centerYn) ** 2))
-        fltCorrectionAngleInRad = np.arcsin(fltOpposite / fltHypotenuse)
-        fltCorrectionAngleInDeg = fltCorrectionAngleInRad * (180.0 / np.pi)
+        opposite = center_y_n - center_y_0
+        hypotenuse = np.sqrt(((center_x_0-center_x_n) ** 2) + ((center_y_0-center_y_n) ** 2))
+        correction_angle_in_rad = np.arcsin(opposite / hypotenuse)
+        correction_angle_in_deg = correction_angle_in_rad * (180.0 / np.pi)
 
-                # final steps are to perform the actual rotation
-
-                # get the rotation matrix for our calculated correction angle
-        rotationMatrix = cv2.getRotationMatrix2D(plateCenter, fltCorrectionAngleInDeg, 1.0)
+        rotation_matrix = cv2.getRotationMatrix2D(plate_center, correction_angle_in_deg, 1.0)
 
         height, width = img.shape[:2]
 
-        imgRotated = cv2.warpAffine(img, rotationMatrix, (width, height))
+        img_rotated = cv2.warpAffine(img, rotation_matrix, (width, height))
 
-        imgCropped = cv2.getRectSubPix(imgRotated, (plateWidth, plateHeight), plateCenter)
+        img_cropped = cv2.getRectSubPix(img_rotated, (plate_width, plate_height), plate_center)
         
-        return imgCropped
+        return img_cropped
 
     def detect(self, img: np.ndarray) -> list:
         """Main function of ExtractPlate class 
@@ -235,18 +238,18 @@ class ExtractPlate:
         list
             Extracted possible plates.
         """
-        listOfPossiblePlates = []
+        list_of_possible_plates = []
         
-        thresh = self.preprocess(img)
+        img_thresh = self.preprocess(img)
         
-        listOfPossibleChars = self.findPossibleChars(thresh)
+        list_of_possible_characteracters = self.findpossible_characteracters(img_thresh)
         
-        listOfListsOfMatchingCharsInScene = self.findListOfListsOfMatchingChars(listOfPossibleChars)
+        list_of_lists_of_matching_characters = self.findListOfListsOfMatchingChars(list_of_possible_characteracters)
         
-        for listOfMatchingChars in listOfListsOfMatchingCharsInScene:
-            imgCropped = self.extractPlate(img, listOfMatchingChars)
+        for list_of_matching_characters in list_of_lists_of_matching_characters:
+            img_cropped = self.extractPlate(img, list_of_matching_characters)
 
-            if imgCropped is not None:
-                listOfPossiblePlates.append(imgCropped)
+            if img_cropped is not None:
+                list_of_possible_plates.append(img_cropped)
         
-        return listOfPossiblePlates
+        return list_of_possible_plates
