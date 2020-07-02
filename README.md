@@ -5,6 +5,24 @@ Repository contains description of Computer Vision laboratory project which is b
 - find and extract possible car plates from image
 - recognize signs from extracted plate
 
+## Example use case
+- car back image
+![car back](./README_FILES/car_back.jpg)
+<br/>
+
+- extracted plate
+
+![car plate](./README_FILES/plate.png)
+<br/>
+
+- JSON file with result for given image
+
+```JSON
+{
+    "car_back.jpg": "PWL3787"
+}
+```
+
 ## Project requirements
 - car plates rotated less than 45 degrees in comparison to horizontal position
 - width of plate is bigger than 1/3 of image width
