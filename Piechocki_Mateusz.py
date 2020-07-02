@@ -1,7 +1,6 @@
 import argparse
 import json
 from pathlib import Path
-
 import cv2
 
 from processing.car_plate import CarPlate
@@ -18,8 +17,7 @@ def main():
     images_dir = Path(args.images_dir)
     results_file = Path(args.results_file)
 
-    images_paths = sorted([image_path for image_path in images_dir.iterdir(
-    ) if image_path.name.endswith('.jpg')])
+    images_paths = sorted([image_path for image_path in images_dir.iterdir() if image_path.name.endswith('.jpg')])
     results = {}
 
     CP = CarPlate()

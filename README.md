@@ -1,8 +1,18 @@
 # Car Plates Recognizer
-Repository contain description of Computer Vision laboratory project which is based on recognizing car plates using OpenCV with Python3.7.
+Repository contains description of Computer Vision laboratory project which is based on recognizing car plates using OpenCV with Python 3.7.
 
-## References
-- [project instruction](https://docs.google.com/document/d/1DtEGWXuEwdygV8ddhlJeeRjb01PxBZOMNoDJcB3Ng4c/edit)
-- [car plates image set](https://drive.google.com/drive/folders/1q8z9sL0b4pBaCcH0pSrj8cnTWxXiYd0v)
-- [Bartosz's car plates image set](https://drive.google.com/drive/folders/1m5F_9uJ-GKzcHvgLzNwHMOuDZye_q6VT)
+## Project tasks
+- find and extract possible car plates from image
+- recognize signs from extracted plate
 
+## Project requirements
+- car plates rotated less than 45 degrees in comparison to horizontal position
+- width of plate is bigger than 1/3 of image width
+- only common polish car plates which contain 7 black signs on white background
+- image with different resolution
+- no use of OCR and ML trained methods and algorithms
+
+## Detector results on project image set
+- Accurancy: 0.845433 (361 good chars per 427 total)                                                                                                                                                         
+- Find acc: 0.950000 (57 readed plates for 60 total)                                                                                                                                                         
+- OCR acc: 0.904762 (361 readed chars for 399 total)

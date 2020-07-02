@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 
-def check(res: dict, gt: dict, show: bool) -> None:
+def check(res: dict, gt: dict, show: bool):
     """Check if numbers for plate are correct.
 
     Parameters
